@@ -20,7 +20,7 @@
   "utils": {
     "auto-auth": {
       "enabled": true,
-      "password": "Sidh2003"
+      "password": ""
     },
     "anti-afk": {
       "enabled": false,
@@ -112,7 +112,7 @@
     ]
   },
   "stand-at": {
-    "enabled": true,
+    "enabled": false,
     "x": 600,
     "y": 95,
     "z": -150,

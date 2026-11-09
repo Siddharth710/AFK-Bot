@@ -6,7 +6,6 @@ const { Movements, pathfinder, goals } = require("mineflayer-pathfinder");
 const { GoalBlock } = goals;
 const config = require("./settings.json");
 const setupWelcome = require("./welcome");
-const standAt = require("./standAt");
 const express = require("express");
 const http = require("http");
 const https = require("https");
@@ -1237,28 +1236,73 @@ function createBot() {
 
     bot.loadPlugin(pathfinder);
 
-    // EasyAuth fix: 'spawn' tab tak fire nahi hota jab tak login na ho (health packet nahi aata),
-    // isliye auth aur welcome ko join hote hi ('login' event) start karte hain.
+    // Authentication must be handled before spawn: EasyAuth servers often do not
+    // emit Mineflayer's spawn event until the player has authenticated.
     const thisBot = bot;
-    bot.once("login", () => {
-      addLog("[Bot] Joined server (login packet received)");
-      const auth = config.utils["auto-auth"];
-      if (auth && auth.enabled && auth.password) {
-        setTimeout(() => {
-          if (bot === thisBot) {
-            addLog("[Auth] Sending /register");
-            thisBot.chat(`/register ${auth.password} ${auth.password}`);
-          }
-        }, 3000);
-        setTimeout(() => {
-          if (bot === thisBot) {
-            addLog("[Auth] Sending /login");
-            thisBot.chat(`/login ${auth.password}`);
-          }
-        }, 6000);
+    const authConfig = config.utils && config.utils["auto-auth"];
+    const authPassword = process.env.BOT_AUTH_PASSWORD || (authConfig && authConfig.password) || "";
+    const authActionsSent = new Set();
+
+    bot.on("login", () => {
+      addLog("[Bot] Login packet received; waiting for the server's auth prompt");
+      if (authConfig && authConfig.enabled && !authPassword) {
+        addLog("[Auth] Password is missing. Set BOT_AUTH_PASSWORD in hosting environment variables.");
+        return;
       }
-      setupWelcome(thisBot, config, addLog);
-      standAt(thisBot, config, addLog);
+
+      // Some auth plugins do not expose their prompt as a normal chat message.
+      // If no register/login prompt was detected after a short grace period,
+      // try /login once (never blindly send /register).
+      if (authConfig && authConfig.enabled && authPassword) {
+        setTimeout(() => {
+          if (bot !== thisBot || !thisBot._client || thisBot._client.ended) return;
+          if (authActionsSent.size === 0) {
+            authActionsSent.add("login");
+            try {
+              thisBot.chat(`/login ${authPassword}`);
+              addLog("[Auth] No readable prompt detected; sent one /login fallback");
+            } catch (error) {
+              addLog(`[Auth] Login fallback failed: ${error.message}`);
+            }
+          }
+        }, 4500);
+      }
+    });
+
+    // Listen from connection creation (not initializeModules/spawn), otherwise
+    // EasyAuth can time out before this handler ever becomes active.
+    bot.on("messagestr", (rawMessage) => {
+      if (bot !== thisBot || !authConfig || authConfig.enabled === false || !authPassword) return;
+      const message = String(rawMessage || "")
+        .replace(/\u00a7[0-9a-fk-or]/gi, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+
+      let action = null;
+      if (/\/register|\bregister\b|sign\s*up|create an account|регистрац|зарегистр/.test(message)) {
+        action = "register";
+      } else if (/\/login|\blog\s*in\b|\blogin\b|please\s+log\s*in|войти|авторизац/.test(message)) {
+        action = "login";
+      }
+
+      if (!action || authActionsSent.has(action)) return;
+      authActionsSent.add(action);
+      const command = action === "register"
+        ? `/register ${authPassword} ${authPassword}`
+        : `/login ${authPassword}`;
+
+      // Small delay lets the server finish sending its prompt. Never send both
+      // commands blindly; only answer the prompt actually received.
+      setTimeout(() => {
+        if (bot !== thisBot || !thisBot._client || thisBot._client.ended) return;
+        try {
+          thisBot.chat(command);
+          addLog(`[Auth] Responded to server ${action} prompt`);
+        } catch (error) {
+          addLog(`[Auth] Could not send ${action} command: ${error.message}`);
+        }
+      }, 700);
     });
 
     // FIX: connection timeout - end the old bot before reconnecting to avoid ghost bots
@@ -1293,6 +1337,7 @@ function createBot() {
       addLog(
         `[Bot] [+] Successfully spawned on server! (Version: ${bot.version})`,
       );
+      setupWelcome(bot, config, addLog);
       if (
         config.discord &&
         config.discord.events &&
@@ -1433,44 +1478,6 @@ function scheduleReconnect() {
 // ============================================================
 function initializeModules(bot, mcData, defaultMove) {
   addLog("[Modules] Initializing all modules...");
-
-  // ---------- AUTO AUTH (REACTIVE) ----------
-  if (config.utils["auto-auth"] && config.utils["auto-auth"].enabled) {
-    const password = config.utils["auto-auth"].password;
-    let authHandled = false;
-
-    const tryAuth = (type) => {
-      if (authHandled || !bot || !botState.connected) return;
-      authHandled = true;
-      if (type === "register") {
-        bot.chat(`/register ${password} ${password}`);
-        addLog("[Auth] Detected register prompt - sent /register");
-      } else {
-        bot.chat(`/login ${password}`);
-        addLog("[Auth] Detected login prompt - sent /login");
-      }
-    };
-
-    bot.on("messagestr", (message) => {
-      if (authHandled) return;
-      const msg = message.toLowerCase();
-      if (
-        msg.includes("/register") ||
-        msg.includes("register ") ||
-        msg.includes("지정된 비밀번호")
-      ) {
-        tryAuth("register");
-      } else if (
-        msg.includes("/login") ||
-        msg.includes("login ") ||
-        msg.includes("로그인")
-      ) {
-        tryAuth("login");
-      }
-    });
-
-    // Failsafe register/login ab createBot ke "login" hook me hota hai (EasyAuth ke liye).
-  }
 
   // ---------- CHAT MESSAGES ----------
   if (config.utils["chat-messages"] && config.utils["chat-messages"].enabled) {
@@ -2095,7 +2102,7 @@ process.on("SIGINT", () => {
 // START THE BOT
 // ============================================================
 addLog("=".repeat(50));
-addLog("  Alvoro Welcome Bot v3.0");
+addLog("  Alvoro Welcome Bot v3.1");
 addLog("=".repeat(50));
 addLog(`Server: ${config.server.ip}:${config.server.port}`);
 addLog(`Version: ${config.server.version}`);

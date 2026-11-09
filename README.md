@@ -29,6 +29,22 @@ We have made setup super easy! Check out the guide below:
 
 ---
 
+
+### Authentication (EasyAuth / login plugins)
+
+Set the environment variable `BOT_AUTH_PASSWORD` in your hosting provider to the
+Minecraft server-auth password for this bot. The bot now waits for the server's
+actual `/register` or `/login` prompt and sends only the matching command. It does
+not blindly send both commands, and authentication handling starts before the
+`spawn` event (which may be delayed until authentication completes).
+
+Do not commit passwords to `settings.json` or GitHub. If a password was previously
+committed, change it on the Minecraft server and update the hosting environment
+variable.
+
+The `stand-at` feature is disabled in the supplied settings. This build does not
+run pathfinding or movement; use your server console to teleport the bot if needed.
+
 ## ⚙️ Usage
 *   **Start**: Just turn on your Aternos server. The bot will join automatically.
 *   **Status**: Visit the Render URL to see a status dashboard.
