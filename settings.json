@@ -118,5 +118,9 @@
     "z": -150,
     "radius": 3,
     "delay-ms": 15000
+  },
+  "safe-mode": {
+    "block-movement-packets": true,
+    "debug-teleport": true
   }
 }

@@ -1238,6 +1238,42 @@ function createBot() {
 
     bot.loadPlugin(pathfinder);
 
+    // ---------- MOVEMENT SAFETY GUARD ----------
+    // Server ne "invalid_player_movement" se kick kiya tha: bot ke bheje position/look packet
+    // me galat value (NaN etc.) ya server ko pasand na aane wali movement. Ye bot sirf khada
+    // rehta hai, isliye outgoing movement packets rok dete hain. Server bot ko khud tp kar sakta hai.
+    const safe = config["safe-mode"] || {};
+    const movementPackets = new Set(["position", "look", "position_look", "flying", "ground"]);
+    const originalWrite = bot._client.write.bind(bot._client);
+    let blockedCount = 0;
+    bot._client.write = (name, params) => {
+      if (movementPackets.has(name)) {
+        const vals = params
+          ? [params.x, params.y, params.z, params.yaw, params.pitch].filter((v) => v !== undefined)
+          : [];
+        const invalid = vals.some((v) => typeof v !== "number" || !Number.isFinite(v));
+        if (invalid) {
+          addLog(`[Guard] Blocked INVALID ${name} packet: ${JSON.stringify(params)}`);
+          return;
+        }
+        if (safe["block-movement-packets"] !== false) {
+          blockedCount++;
+          return;
+        }
+      }
+      return originalWrite(name, params);
+    };
+    if (safe["debug-teleport"]) {
+      let shown = 0;
+      bot._client.on("position", (p) => {
+        if (shown++ < 5) {
+          addLog(
+            `[Debug] Server teleport: x=${p.x} y=${p.y} z=${p.z} yaw=${p.yaw} pitch=${p.pitch} flags=${JSON.stringify(p.flags)}`,
+          );
+        }
+      });
+    }
+
     // Authentication must run before spawn: many login plugins do not emit
     // Mineflayer's spawn event until registration/login has completed.
     const thisBot = bot;
