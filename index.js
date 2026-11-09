@@ -1338,7 +1338,19 @@ function createBot() {
         authFallbackTimer = setTimeout(() => {
           if (bot !== thisBot || !thisBot._client || thisBot._client.ended) return;
           if (!authCommandSent) {
-            sendAuthCommand(authRegistered ? "login" : "register", "no readable prompt fallback");
+            if (authRegistered) {
+              sendAuthCommand("login", "no readable prompt fallback");
+            } else {
+              // Vercel pe .auth-state.json save nahi hota, to bot ko pata nahi hota ki account
+              // registered hai ya nahi. Isliye pehle /register, phir /l bhejo. Dono safe hain:
+              // registered account pe /register bas "already registered" bolta hai.
+              sendAuthCommand("register", "fallback step 1");
+              setTimeout(() => {
+                if (bot !== thisBot || !thisBot._client || thisBot._client.ended) return;
+                authCommandSent = null;
+                sendAuthCommand("login", "fallback step 2");
+              }, 3000);
+            }
           }
         }, 4500);
       }
