@@ -37,7 +37,7 @@
     "chat-log": true,
     "auto-reconnect": true,
     "auto-reconnect-delay": 2000,
-    "max-reconnect-delay": 120000
+    "max-reconnect-delay": 30000
   },
   "movement": {
     "enabled": false,
@@ -114,7 +114,7 @@
   "stand-at": {
     "enabled": true,
     "x": 600,
-    "y": null,
+    "y": 95,
     "z": -150,
     "radius": 3,
     "delay-ms": 15000
