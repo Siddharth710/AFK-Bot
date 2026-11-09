@@ -5,6 +5,7 @@ const mineflayer = require("mineflayer");
 const { Movements, pathfinder, goals } = require("mineflayer-pathfinder");
 const { GoalBlock } = goals;
 const config = require("./settings.json");
+const setupWelcome = require("./welcome");
 const express = require("express");
 const http = require("http");
 const https = require("https");
@@ -1277,6 +1278,7 @@ function createBot() {
       defaultMove.fallDamageCost = 1000;
 
       initializeModules(bot, mcData, defaultMove);
+      setupWelcome(bot, config, addLog);
 
       // Attempt creative mode (only works if bot has OP and enabled in settings)
       setTimeout(() => {
@@ -1432,16 +1434,22 @@ function initializeModules(bot, mcData, defaultMove) {
       }
     });
 
-    // Failsafe: if no prompt after 10s, try login anyway
+    // Failsafe (EasyAuth etc.): prompt detect ho ya na ho, jaldi register + login bhejo.
+    // Registered account pe /register bas "already registered" bolta hai, harmless hai.
+    // Naye account pe /register hi login kara deta hai. EasyAuth ka 60s timeout hota hai.
     setTimeout(() => {
-      if (!authHandled && bot && botState.connected) {
-        addLog(
-          "[Auth] No prompt detected after 10s, sending /login as failsafe",
-        );
+      if (bot && botState.connected) {
+        addLog("[Auth] Failsafe: sending /register");
+        bot.chat(`/register ${password} ${password}`);
+      }
+    }, 4000);
+    setTimeout(() => {
+      if (bot && botState.connected) {
+        addLog("[Auth] Failsafe: sending /login");
         bot.chat(`/login ${password}`);
         authHandled = true;
       }
-    }, 10000);
+    }, 8000);
   }
 
   // ---------- CHAT MESSAGES ----------
@@ -2067,7 +2075,7 @@ process.on("SIGINT", () => {
 // START THE BOT
 // ============================================================
 addLog("=".repeat(50));
-addLog("  Minecraft AFK Bot v2.5 - Bug-Fixed Edition");
+addLog("  Alvoro Welcome Bot v3.0");
 addLog("=".repeat(50));
 addLog(`Server: ${config.server.ip}:${config.server.port}`);
 addLog(`Version: ${config.server.version}`);
