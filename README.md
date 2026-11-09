@@ -30,20 +30,23 @@ We have made setup super easy! Check out the guide below:
 ---
 
 
-### Authentication (EasyAuth / login plugins)
+### Authentication (server `/register` and `/l`)
 
-Set the environment variable `BOT_AUTH_PASSWORD` in your hosting provider to the
-Minecraft server-auth password for this bot. The bot now waits for the server's
-actual `/register` or `/login` prompt and sends only the matching command. It does
-not blindly send both commands, and authentication handling starts before the
-`spawn` event (which may be delayed until authentication completes).
+Set `utils.auto-auth.password` in `settings.json`, or set the environment variable
+`BOT_AUTH_PASSWORD` in your hosting provider. The password is never printed in logs.
 
-Do not commit passwords to `settings.json` or GitHub. If a password was previously
-committed, change it on the Minecraft server and update the hosting environment
-variable.
+On a fresh account, the bot sends `/register PASSWORD PASSWORD`. After registration
+is confirmed (or the bot successfully spawns), it saves a local `.auth-state.json`
+flag and uses `/l PASSWORD` on later reconnects. If the local state is missing but
+the server says the account is already registered, the bot switches to `/l`.
 
-The `stand-at` feature is disabled in the supplied settings. This build does not
-run pathfinding or movement; use your server console to teleport the bot if needed.
+Do not commit your password to GitHub. The `.auth-state.json` file is local state
+and is ignored by Git. The supplied `settings.json` intentionally leaves the
+password blank; you must enter your server-auth password before starting the bot.
+
+Movement, anti-AFK movement, and stand-at are disabled in the supplied settings.
+Use the server console to teleport the bot if needed.
+
 
 ## ⚙️ Usage
 *   **Start**: Just turn on your Aternos server. The bot will join automatically.

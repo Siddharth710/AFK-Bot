@@ -1,7 +1,7 @@
 {
   "name": "Alvoro Welcome Bot",
   "bot-account": {
-    "username": "Alvoro Is Best",
+    "username": "Alvoro_IsBest",
     "password": "",
     "type": "offline"
   },
@@ -20,7 +20,7 @@
   "utils": {
     "auto-auth": {
       "enabled": true,
-      "password": ""
+      "password": "Siddh7103"
     },
     "anti-afk": {
       "enabled": false,

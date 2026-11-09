@@ -9,6 +9,8 @@ const setupWelcome = require("./welcome");
 const express = require("express");
 const http = require("http");
 const https = require("https");
+const fs = require("fs");
+const path = require("path");
 
 // ============================================================
 // EXPRESS SERVER - Keep Render/Aternos alive
@@ -1236,74 +1238,116 @@ function createBot() {
 
     bot.loadPlugin(pathfinder);
 
-    // Authentication must be handled before spawn: EasyAuth servers often do not
-    // emit Mineflayer's spawn event until the player has authenticated.
+    // Authentication must run before spawn: many login plugins do not emit
+    // Mineflayer's spawn event until registration/login has completed.
     const thisBot = bot;
     const authConfig = config.utils && config.utils["auto-auth"];
     const authPassword = process.env.BOT_AUTH_PASSWORD || (authConfig && authConfig.password) || "";
-    const authActionsSent = new Set();
+    const authStateFile = path.join(__dirname, ".auth-state.json");
+    let authRegistered = false;
+    let authCommandSent = null;
+    let authFallbackTimer = null;
 
-    bot.on("login", () => {
-      addLog("[Bot] Login packet received; waiting for the server's auth prompt");
-      if (authConfig && authConfig.enabled && !authPassword) {
-        addLog("[Auth] Password is missing. Set BOT_AUTH_PASSWORD in hosting environment variables.");
+    try {
+      const savedAuthState = JSON.parse(fs.readFileSync(authStateFile, "utf8"));
+      authRegistered = savedAuthState.registered === true;
+    } catch (_) {
+      // No saved state yet. The first successful registration will create it.
+    }
+
+    const saveRegisteredState = () => {
+      authRegistered = true;
+      try {
+        fs.writeFileSync(authStateFile, JSON.stringify({ registered: true }, null, 2));
+      } catch (error) {
+        addLog(`[Auth] Could not save registration state: ${error.message}`);
+      }
+    };
+
+    const sendAuthCommand = (action, reason) => {
+      if (bot !== thisBot || !thisBot._client || thisBot._client.ended) return;
+      if (!authConfig || authConfig.enabled === false || !authPassword) return;
+      if (authCommandSent === action) return;
+
+      authCommandSent = action;
+      if (authFallbackTimer) {
+        clearTimeout(authFallbackTimer);
+        authFallbackTimer = null;
+      }
+
+      // This server uses /register on first use and /l for later logins.
+      const command = action === "register"
+        ? `/register ${authPassword} ${authPassword}`
+        : `/l ${authPassword}`;
+
+      setTimeout(() => {
+        if (bot !== thisBot || !thisBot._client || thisBot._client.ended) return;
+        try {
+          thisBot.chat(command);
+          addLog(`[Auth] Sent ${action === "register" ? "/register" : "/l"} (${reason}); password hidden`);
+        } catch (error) {
+          addLog(`[Auth] Could not send authentication command: ${error.message}`);
+        }
+      }, 600);
+    };
+
+    const handleAuthMessage = (rawMessage) => {
+      if (bot !== thisBot || !authConfig || authConfig.enabled === false || !authPassword) return;
+      const message = String(rawMessage && typeof rawMessage.toString === "function" ? rawMessage.toString() : rawMessage || "")
+        .replace(/\u00a7[0-9a-fk-or]/gi, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+      if (!message) return;
+
+      // If the account already exists, recover from a stale/missing local state.
+      const alreadyRegistered = /already\s+registered|account\s+already\s+exists|user\s+already\s+exists/.test(message);
+      if (alreadyRegistered && authCommandSent === "register") {
+        saveRegisteredState();
+        authCommandSent = null;
+        setTimeout(() => sendAuthCommand("login", "server says account is already registered"), 300);
         return;
       }
 
-      // Some auth plugins do not expose their prompt as a normal chat message.
-      // If no register/login prompt was detected after a short grace period,
-      // try /login once (never blindly send /register).
+      const registrationSucceeded = /successfully\s+registered|registered\s+successfully|registration\s+(successful|complete)|account\s+(successfully\s+)?created|you\s+are\s+now\s+registered/.test(message);
+      if (registrationSucceeded) saveRegisteredState();
+
+      const registerPrompt = /\/register\b|not\s+registered|please\s+register|register\s+(first|an\s+account)|create\s+an\s+account|registration\s+required|регистрац|зарегистр/.test(message);
+      const loginPrompt = /\/l(?:ogin)?\b|\blog\s*in\b|\blogin\b|please\s+authenticate|authentication\s+required|already\s+registered|войти|авторизац/.test(message);
+
+      if (registerPrompt && loginPrompt) {
+        sendAuthCommand(authRegistered ? "login" : "register", "combined auth instructions");
+      } else if (registerPrompt) {
+        sendAuthCommand("register", "registration prompt");
+      } else if (loginPrompt) {
+        sendAuthCommand("login", "login prompt");
+      }
+    };
+
+    bot.on("login", () => {
+      addLog("[Bot] Login packet received; waiting for server authentication");
+      if (authConfig && authConfig.enabled && !authPassword) {
+        addLog("[Auth] Password is blank in settings.json. Set utils.auto-auth.password or BOT_AUTH_PASSWORD.");
+        return;
+      }
+
+      // Some plugins send prompts as action bars/components that Mineflayer
+      // cannot expose as plain text. Fall back using saved account state:
+      // register once on a fresh bot, then use /l on later connections.
       if (authConfig && authConfig.enabled && authPassword) {
-        setTimeout(() => {
+        authFallbackTimer = setTimeout(() => {
           if (bot !== thisBot || !thisBot._client || thisBot._client.ended) return;
-          if (authActionsSent.size === 0) {
-            authActionsSent.add("login");
-            try {
-              thisBot.chat(`/login ${authPassword}`);
-              addLog("[Auth] No readable prompt detected; sent one /login fallback");
-            } catch (error) {
-              addLog(`[Auth] Login fallback failed: ${error.message}`);
-            }
+          if (!authCommandSent) {
+            sendAuthCommand(authRegistered ? "login" : "register", "no readable prompt fallback");
           }
         }, 4500);
       }
     });
 
-    // Listen from connection creation (not initializeModules/spawn), otherwise
-    // EasyAuth can time out before this handler ever becomes active.
-    bot.on("messagestr", (rawMessage) => {
-      if (bot !== thisBot || !authConfig || authConfig.enabled === false || !authPassword) return;
-      const message = String(rawMessage || "")
-        .replace(/\u00a7[0-9a-fk-or]/gi, "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .toLowerCase();
-
-      let action = null;
-      if (/\/register|\bregister\b|sign\s*up|create an account|регистрац|зарегистр/.test(message)) {
-        action = "register";
-      } else if (/\/login|\blog\s*in\b|\blogin\b|please\s+log\s*in|войти|авторизац/.test(message)) {
-        action = "login";
-      }
-
-      if (!action || authActionsSent.has(action)) return;
-      authActionsSent.add(action);
-      const command = action === "register"
-        ? `/register ${authPassword} ${authPassword}`
-        : `/login ${authPassword}`;
-
-      // Small delay lets the server finish sending its prompt. Never send both
-      // commands blindly; only answer the prompt actually received.
-      setTimeout(() => {
-        if (bot !== thisBot || !thisBot._client || thisBot._client.ended) return;
-        try {
-          thisBot.chat(command);
-          addLog(`[Auth] Responded to server ${action} prompt`);
-        } catch (error) {
-          addLog(`[Auth] Could not send ${action} command: ${error.message}`);
-        }
-      }, 700);
-    });
+    // Listen before spawn. Both events are wired because some server/plugin
+    // versions expose formatted chat on only one of these Mineflayer events.
+    bot.on("messagestr", handleAuthMessage);
+    bot.on("message", handleAuthMessage);
 
     // FIX: connection timeout - end the old bot before reconnecting to avoid ghost bots
     clearBotTimeouts();
@@ -1337,6 +1381,7 @@ function createBot() {
       addLog(
         `[Bot] [+] Successfully spawned on server! (Version: ${bot.version})`,
       );
+      if (authConfig && authConfig.enabled && authPassword) saveRegisteredState();
       setupWelcome(bot, config, addLog);
       if (
         config.discord &&
