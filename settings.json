@@ -1,5 +1,5 @@
 {
-  "name": "AFK Bot",
+  "name": "Alvoro Welcome Bot",
   "bot-account": {
     "username": "Alvoro Is Best",
     "password": "",
@@ -8,11 +8,11 @@
   "server": {
     "ip": "alvorosmp.mcsh.gg",
     "port": 25565,
-    "version": "",
+    "version": "26.1",
     "try-creative": false
   },
   "position": {
-    "enabled": true,
+    "enabled": false,
     "x": 0,
     "y": 100,
     "z": 0
@@ -23,12 +23,12 @@
       "password": "Sidh2003"
     },
     "anti-afk": {
-      "enabled": true,
+      "enabled": false,
       "sneak": true
     },
     "chat-messages": {
-      "enabled": true,
-      "repeat": true,
+      "enabled": false,
+      "repeat": false,
       "repeat-delay": 120,
       "messages": [
         "Be Creative Grind More!"
@@ -40,24 +40,24 @@
     "max-reconnect-delay": 120000
   },
   "movement": {
-    "enabled": true,
+    "enabled": false,
     "circle-walk": {
-      "enabled": true,
+      "enabled": false,
       "radius": 4,
       "speed": 3000
     },
     "look-around": {
-      "enabled": true,
+      "enabled": false,
       "interval": 5000
     },
     "random-jump": {
-      "enabled": true,
+      "enabled": false,
       "interval": 10000
     }
   },
   "modules": {
-    "avoidMobs": true,
-    "combat": true,
+    "avoidMobs": false,
+    "combat": false,
     "beds": false,
     "chat": true,
     "console-commands": true
@@ -80,6 +80,43 @@
     }
   },
   "chat": {
-    "respond": true
+    "respond": false
+  },
+  "welcome": {
+    "enabled": true,
+    "server-name": "Alvoro SMP",
+    "join-message": "Hello everyone! I am the welcome bot of {server}. Be creative, grind more and enjoy!",
+    "intro-delay-ms": 12000,
+    "intro-cooldown-seconds": 600,
+    "ignore-existing-ms": 8000,
+    "welcome-delay-ms": 3000,
+    "welcome-cooldown-seconds": 60,
+    "message-gap-ms": 1500,
+    "welcome-messages": [
+      "Welcome to {server}, {player}! Have fun and be creative!",
+      "Hey {player}, welcome! {server} is the best server around!",
+      "{player} just joined! Welcome to the family, enjoy the grind!",
+      "Welcome {player}! Best community, best builds, only on {server}!"
+    ],
+    "praise-enabled": true,
+    "praise-interval-seconds": 900,
+    "praise-messages": [
+      "{server} has the best community, so glad you are all here!",
+      "Be creative, grind more and build something legendary on {server}!",
+      "Smooth gameplay and friendly players, {server} is the best!",
+      "Thanks for making {server} awesome, everyone!"
+    ],
+    "goodbye-enabled": false,
+    "goodbye-messages": [
+      "See you soon, {player}! Come back to {server} anytime!"
+    ]
+  },
+  "stand-at": {
+    "enabled": true,
+    "x": 600,
+    "y": null,
+    "z": -150,
+    "radius": 3,
+    "delay-ms": 15000
   }
 }

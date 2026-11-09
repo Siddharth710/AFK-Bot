@@ -6,6 +6,7 @@ const { Movements, pathfinder, goals } = require("mineflayer-pathfinder");
 const { GoalBlock } = goals;
 const config = require("./settings.json");
 const setupWelcome = require("./welcome");
+const standAt = require("./standAt");
 const express = require("express");
 const http = require("http");
 const https = require("https");
@@ -997,6 +998,8 @@ app.post("/stop", (req, res) => {
   }
 
   clearAllIntervals();
+  clearBotTimeouts();
+  isReconnecting = false;
   addLog("[Control] Bot stopped");
 
   res.json({ success: true });
@@ -1226,6 +1229,30 @@ function createBot() {
 
     bot.loadPlugin(pathfinder);
 
+    // EasyAuth fix: 'spawn' tab tak fire nahi hota jab tak login na ho (health packet nahi aata),
+    // isliye auth aur welcome ko join hote hi ('login' event) start karte hain.
+    const thisBot = bot;
+    bot.once("login", () => {
+      addLog("[Bot] Joined server (login packet received)");
+      const auth = config.utils["auto-auth"];
+      if (auth && auth.enabled && auth.password) {
+        setTimeout(() => {
+          if (bot === thisBot) {
+            addLog("[Auth] Sending /register");
+            thisBot.chat(`/register ${auth.password} ${auth.password}`);
+          }
+        }, 3000);
+        setTimeout(() => {
+          if (bot === thisBot) {
+            addLog("[Auth] Sending /login");
+            thisBot.chat(`/login ${auth.password}`);
+          }
+        }, 6000);
+      }
+      setupWelcome(thisBot, config, addLog);
+      standAt(thisBot, config, addLog);
+    });
+
     // FIX: connection timeout - end the old bot before reconnecting to avoid ghost bots
     clearBotTimeouts();
     connectionTimeoutId = setTimeout(() => {
@@ -1278,7 +1305,6 @@ function createBot() {
       defaultMove.fallDamageCost = 1000;
 
       initializeModules(bot, mcData, defaultMove);
-      setupWelcome(bot, config, addLog);
 
       // Attempt creative mode (only works if bot has OP and enabled in settings)
       setTimeout(() => {
@@ -1434,22 +1460,7 @@ function initializeModules(bot, mcData, defaultMove) {
       }
     });
 
-    // Failsafe (EasyAuth etc.): prompt detect ho ya na ho, jaldi register + login bhejo.
-    // Registered account pe /register bas "already registered" bolta hai, harmless hai.
-    // Naye account pe /register hi login kara deta hai. EasyAuth ka 60s timeout hota hai.
-    setTimeout(() => {
-      if (bot && botState.connected) {
-        addLog("[Auth] Failsafe: sending /register");
-        bot.chat(`/register ${password} ${password}`);
-      }
-    }, 4000);
-    setTimeout(() => {
-      if (bot && botState.connected) {
-        addLog("[Auth] Failsafe: sending /login");
-        bot.chat(`/login ${password}`);
-        authHandled = true;
-      }
-    }, 8000);
+    // Failsafe register/login ab createBot ke "login" hook me hota hai (EasyAuth ke liye).
   }
 
   // ---------- CHAT MESSAGES ----------
